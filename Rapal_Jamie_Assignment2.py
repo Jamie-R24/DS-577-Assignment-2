@@ -10,6 +10,8 @@ from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
 # Function to load and preprocess data
 def load_data(file_path):
@@ -130,6 +132,54 @@ def evaluate_model(model, X_test, y_test):
 
     return accuracy, avg_confidence, y_pred, confidence
 
+def kmeans_clustering(all_data):
+    """
+    Apply K-means clustering to find groups in location data (Longitude, Latitude).
+    Uses the Elbow Method to determine the optimal number of clusters.
+    """
+    # Select only Longitude and Latitude columns
+    X = all_data[['Longitude', 'Latitude']].to_numpy()
+
+    # Elbow Method: Find the optimal number of clusters
+    distortions = []
+    K_range = range(1, 11)  # Checking K values from 1 to 10
+
+    for k in K_range:
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmeans.fit(X)
+        distortions.append(kmeans.inertia_)  # Sum of squared distances to closest cluster center
+
+    # Plot Elbow Method
+    plt.figure(figsize=(8, 5))
+    plt.plot(K_range, distortions, marker='o', linestyle='-')
+    plt.xlabel('Number of clusters (K)')
+    plt.ylabel('Distortion (Inertia)')
+    plt.title('Elbow Method for Optimal K')
+    plt.grid()
+    plt.savefig('elbow_method.png')
+    plt.show()
+
+    # Choose optimal K (e.g., user decides based on the elbow plot)
+    optimal_k = 3  # Change this based on the elbow method result
+
+    # Apply K-means with the chosen K
+    kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+    all_data['Cluster'] = kmeans.fit_predict(X)
+
+    # Plot clusters
+    plt.figure(figsize=(8, 6))
+    plt.scatter(all_data['Longitude'], all_data['Latitude'], c=all_data['Cluster'], cmap='viridis', alpha=0.6)
+    plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], c='red', marker='x', s=200, label='Centroids')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.title(f'K-means Clustering (K={optimal_k})')
+    plt.legend()
+    plt.savefig('kmeans_clusters.png')
+    plt.show()
+
+    print(f"K-means clustering applied with {optimal_k} clusters.")
+
+
 def main():
     """
     Main function to run the entire project pipeline
@@ -138,7 +188,7 @@ def main():
     
     # Load training data (weeks 1-4)
     training_data = []
-    for week in range(1, 4):
+    for week in range(1, 5):
         try:
             file_path = f"data/week{week}.mat"
             df = load_data(file_path)
@@ -164,7 +214,7 @@ def main():
     
     # Load validation data (week 5)
     try:
-        validation_df = load_data("data/week4.mat")
+        validation_df = load_data("data/week5.mat")
         print(f"Loaded validation data: {len(validation_df)} records")
         
         # Extract features and labels
@@ -189,7 +239,7 @@ def main():
     
     # Process test data if available (week 6)
     try:
-        test_df = load_data("data/week5.mat")
+        test_df = load_data("data/week6.mat")
         print(f"Loaded test data: {len(test_df)} records")
 
         # Extract features
@@ -226,7 +276,34 @@ def main():
     except Exception as e:
         print(f"No test data available or error: {e}")
 
-    print("Project execution completed.")
+    print("Linear Regression execution completed.")
+
+    try:
+        print("Starting K-means clustering on location data...")
+
+        all_weeks_data = []
+        for week in range(1, 6):  # Load 5 weeks of data
+            try:
+                file_path = f"data/week{week}.mat"
+                df = load_data(file_path)
+                all_weeks_data.append(df)
+                print(f"Loaded week {week} data: {len(df)} records")
+            except Exception as e:
+                print(f"Error loading week {week} data: {e}")
+
+        # Combine all 5 weeks of data
+        if all_weeks_data:
+            all_data = pd.concat(all_weeks_data)
+            print(f"Total data loaded: {len(all_data)} records")
+        else:
+            print("No data available. Exiting.")
+            return
+
+        # Apply K-means clustering
+        kmeans_clustering(all_data)
+        
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
