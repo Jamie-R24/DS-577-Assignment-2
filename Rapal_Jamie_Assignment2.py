@@ -5,6 +5,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score, mean_squared_error
 from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
@@ -56,64 +58,76 @@ def extract_features(df):
 # Function to train and evaluate the model
 def train_model(X_train, y_train):
     """
-    Train regression model with feature names handling
+    Train regression model with feature names handling using Pipeline and ColumnTransformer.
     """
     print("Training model...")
 
-    X_train_array = X_train.to_numpy()
-    
-    # Initialize Random Forest
-    rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    # Define the preprocessing steps
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', 'passthrough', X_train.columns.tolist())  # Pass through all numerical columns
+        ])
+
+    # Create the pipeline
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('regressor', RandomForestRegressor(random_state=42))
+    ])
 
     # Define hyperparameter grid
     param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20, 30],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4]
+        'regressor__n_estimators': [50, 100, 200],
+        'regressor__max_depth': [None, 10, 20, 30],
+        'regressor__min_samples_split': [2, 5, 10],
+        'regressor__min_samples_leaf': [1, 2, 4]
     }
-    
+
     # Perform grid search with cross-validation
     grid_search = GridSearchCV(
-        estimator=rf_model,
+        estimator=pipeline,
         param_grid=param_grid,
         cv=5,
         n_jobs=-1,
         scoring='neg_mean_squared_error',
         verbose=1
     )
-    
-    grid_search.fit(X_train_array, y_train)
-    
+
+    grid_search.fit(X_train, y_train)
+
     # Get the best model
     best_model = grid_search.best_estimator_
-    
+
     print(f"Best parameters: {grid_search.best_params_}")
-    
+
     return best_model
 
 def evaluate_model(model, X_test, y_test):
-
-    X_test_array = X_test.to_numpy()
-
+    """
+    Evaluate the model, ensuring consistent preprocessing.
+    """
     # Make predictions
-    y_pred_raw = model.predict(X_test_array)
-    
-    # Round predictions to nearest integer (as specified in the project requirements)
+    y_pred_raw = model.predict(X_test)
+
+    # Round predictions to nearest integer
     y_pred = np.round(y_pred_raw).astype(int)
-    
+
     # Calculate accuracy
     accuracy = accuracy_score(y_test, y_pred)
-    
+
     # Calculate confidence for each prediction
-    # We'll use prediction probabilities from all trees in the forest
-    # and compute standard deviation as a measure of uncertainty
-    predictions = np.array([tree.predict(X_test) for tree in model.estimators_])
+    rf_regressor = model.named_steps['regressor']
+    predictions = []
+    for tree in rf_regressor.estimators_:
+        # Preprocess X_test using the pipeline's preprocessor
+        X_processed = model.named_steps['preprocessor'].transform(X_test)
+        predictions.append(tree.predict(X_processed))
+
+    predictions = np.array(predictions)
     confidence = 1 - np.std(predictions, axis=0) / (np.max(predictions, axis=0) - np.min(predictions, axis=0) + 1e-10)
-    
+
     # Average confidence
     avg_confidence = np.mean(confidence)
-    
+
     return accuracy, avg_confidence, y_pred, confidence
 
 def main():
@@ -154,9 +168,8 @@ def main():
         print(f"Loaded validation data: {len(validation_df)} records")
         
         # Extract features and labels
-        X_val = extract_features(validation_df).to_numpy
+        X_val = extract_features(validation_df)
         y_val = validation_df['Label']
-        
         # Evaluate model on validation data
         val_accuracy, val_confidence, val_predictions, val_pred_confidence = evaluate_model(model, X_val, y_val)
         print(f"Validation accuracy: {val_accuracy:.4f}")
@@ -178,18 +191,22 @@ def main():
     try:
         test_df = load_data("data/week5.mat")
         print(f"Loaded test data: {len(test_df)} records")
-        
+
         # Extract features
-        X_test = extract_features(test_df).to_numpy()
-        
+        X_test = extract_features(test_df)
         # Make predictions
         test_predictions_raw = model.predict(X_test)
         test_predictions = np.round(test_predictions_raw).astype(int)
-        
+
         # Calculate confidence for each prediction
-        predictions = np.array([tree.predict(X_test) for tree in model.estimators_])
+        rf_regressor = model.named_steps['regressor'] # Get the regressor from the pipeline.
+        predictions = []
+        for tree in rf_regressor.estimators_:
+            X_processed = model.named_steps['preprocessor'].transform(X_test)
+            predictions.append(tree.predict(X_processed))
+        predictions = np.array(predictions)
         test_confidence = 1 - np.std(predictions, axis=0) / (np.max(predictions, axis=0) - np.min(predictions, axis=0) + 1e-10)
-        
+
         # Save test results
         test_results = pd.DataFrame({
             'Timestamp': test_df['Timestamp'],
@@ -197,18 +214,18 @@ def main():
             'Confidence': test_confidence
         })
         test_results.to_csv('test_predictions.csv', index=False)
-        
+
         print(f"Test predictions saved to 'test_predictions.csv'")
         print(f"Average prediction confidence: {np.mean(test_confidence):.4f}")
-        
+
         # If actual labels are available (for testing)
         if 'Label' in test_df.columns:
             test_accuracy = accuracy_score(test_df['Label'], test_predictions)
             print(f"Test accuracy: {test_accuracy:.4f}")
-        
+
     except Exception as e:
         print(f"No test data available or error: {e}")
-    
+
     print("Project execution completed.")
 
 if __name__ == "__main__":
