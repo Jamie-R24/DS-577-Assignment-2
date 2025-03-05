@@ -13,6 +13,16 @@ from datetime import datetime
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
+"""
+To test the accuracy and confidence of Week 6 Predictions, just add the Week6.mat file
+to the folder "data". Running the program will spit out the test predictions in 
+test_predictions.csv and will also run the K Means classifier. The validation_results.csv
+shows the validation predictions as well as the actual value and confidence. 
+
+elbow_method.png and kmeans_clusters.png displays the graph for the loss with the elbow method
+and the graphical representation of the clusters. 
+"""
+
 # Function to load and preprocess data
 def load_data(file_path):
     """
@@ -157,16 +167,14 @@ def kmeans_clustering(all_data):
     plt.title('Elbow Method for Optimal K')
     plt.grid()
     plt.savefig('elbow_method.png')
-    plt.show()
 
-    # Choose optimal K (e.g., user decides based on the elbow plot)
-    optimal_k = 3  # Change this based on the elbow method result
+    optimal_k = 3  #After running once, 3 seemed to be the optimal value
 
-    # Apply K-means with the chosen K
+    #K-means with the chosen K
     kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
     all_data['Cluster'] = kmeans.fit_predict(X)
 
-    # Plot clusters
+    # Plot
     plt.figure(figsize=(8, 6))
     plt.scatter(all_data['Longitude'], all_data['Latitude'], c=all_data['Cluster'], cmap='viridis', alpha=0.6)
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], c='red', marker='x', s=200, label='Centroids')
@@ -175,16 +183,13 @@ def kmeans_clustering(all_data):
     plt.title(f'K-means Clustering (K={optimal_k})')
     plt.legend()
     plt.savefig('kmeans_clusters.png')
-    plt.show()
 
     print(f"K-means clustering applied with {optimal_k} clusters.")
 
 
 def main():
-    """
-    Main function to run the entire project pipeline
-    """
-    print("Starting location prediction project...")
+    
+    print("Starting Regression location prediction...")
     
     # Load training data (weeks 1-4)
     training_data = []
@@ -197,7 +202,7 @@ def main():
         except Exception as e:
             print(f"Error loading week {week} data: {e}")
     
-    # Combine all training data
+    # Combine 
     if training_data:
         train_df = pd.concat(training_data)
         print(f"Combined training data: {len(train_df)} records")
@@ -205,27 +210,26 @@ def main():
         print("No training data available. Exiting.")
         return
     
-    # Extract features and labels
+    # Extract
     X_train = extract_features(train_df)
     y_train = train_df['Label']
     
-    # Train model
+    # Train 
     model = train_model(X_train, y_train)
     
-    # Load validation data (week 5)
+    # Load val data
     try:
         validation_df = load_data("data/week5.mat")
         print(f"Loaded validation data: {len(validation_df)} records")
         
-        # Extract features and labels
+       
         X_val = extract_features(validation_df)
         y_val = validation_df['Label']
-        # Evaluate model on validation data
+      
         val_accuracy, val_confidence, val_predictions, val_pred_confidence = evaluate_model(model, X_val, y_val)
         print(f"Validation accuracy: {val_accuracy:.4f}")
         print(f"Average prediction confidence: {val_confidence:.4f}")
-        
-        # Save validation results
+    
         validation_results = pd.DataFrame({
             'Timestamp': validation_df['Timestamp'],
             'Actual_Label': y_val,
@@ -237,18 +241,16 @@ def main():
     except Exception as e:
         print(f"Error processing validation data: {e}")
     
-    # Process test data if available (week 6)
     try:
         test_df = load_data("data/week6.mat")
         print(f"Loaded test data: {len(test_df)} records")
 
-        # Extract features
+  
         X_test = extract_features(test_df)
-        # Make predictions
+
         test_predictions_raw = model.predict(X_test)
         test_predictions = np.round(test_predictions_raw).astype(int)
 
-        # Calculate confidence for each prediction
         rf_regressor = model.named_steps['regressor'] # Get the regressor from the pipeline.
         predictions = []
         for tree in rf_regressor.estimators_:
@@ -257,7 +259,6 @@ def main():
         predictions = np.array(predictions)
         test_confidence = 1 - np.std(predictions, axis=0) / (np.max(predictions, axis=0) - np.min(predictions, axis=0) + 1e-10)
 
-        # Save test results
         test_results = pd.DataFrame({
             'Timestamp': test_df['Timestamp'],
             'Predicted_Label': test_predictions,
@@ -268,7 +269,6 @@ def main():
         print(f"Test predictions saved to 'test_predictions.csv'")
         print(f"Average prediction confidence: {np.mean(test_confidence):.4f}")
 
-        # If actual labels are available (for testing)
         if 'Label' in test_df.columns:
             test_accuracy = accuracy_score(test_df['Label'], test_predictions)
             print(f"Test accuracy: {test_accuracy:.4f}")
@@ -279,10 +279,10 @@ def main():
     print("Linear Regression execution completed.")
 
     try:
-        print("Starting K-means clustering on location data...")
+        print("Starting K-means clustering...")
 
         all_weeks_data = []
-        for week in range(1, 6):  # Load 5 weeks of data
+        for week in range(1, 6):  # Load 5 weeks 
             try:
                 file_path = f"data/week{week}.mat"
                 df = load_data(file_path)
@@ -291,7 +291,6 @@ def main():
             except Exception as e:
                 print(f"Error loading week {week} data: {e}")
 
-        # Combine all 5 weeks of data
         if all_weeks_data:
             all_data = pd.concat(all_weeks_data)
             print(f"Total data loaded: {len(all_data)} records")
@@ -301,7 +300,7 @@ def main():
 
         # Apply K-means clustering
         kmeans_clustering(all_data)
-        
+
     except Exception as e:
         print(f"Error: {e}")
 
